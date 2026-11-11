@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::TcpListener;
 
 fn main() {
@@ -8,9 +8,27 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                let response = b"+PONG\r\n";
-                stream.write_all(response).unwrap();
+                let mut buffer = [0; 1024];
+
+                // continuously read commands in the same connection
+                loop {
+                    let _n = match stream.read(&mut buffer) {
+                        Ok(0) => break, // client closed the connection
+                        Ok(n) => n,
+                        Err(e) => {
+                            eprintln!("read error: {}", e);
+                            break;
+                        }
+                    };
+
+                    let response = b"+PONG\r\n";
+                    if let Err(e) = stream.write_all(response) {
+                        eprintln!("write error: {}", e);
+                        break;
+                    };
+                }
             }
+
             Err(e) => {
                 println!("error: {}", e);
             }
