@@ -1,37 +1,43 @@
 #![allow(unused_imports)]
-use std::io::{Read, Write};
-use std::net::TcpListener;
+use tokio::{
+    io::{self, AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+};
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                let mut buffer = [0; 1024];
-
-                // continuously read commands in the same connection
-                loop {
-                    let _n = match stream.read(&mut buffer) {
-                        Ok(0) => break, // client closed the connection
-                        Ok(n) => n,
-                        Err(e) => {
-                            eprintln!("read error: {}", e);
-                            break;
-                        }
-                    };
-
-                    let response = b"+PONG\r\n";
-                    if let Err(e) = stream.write_all(response) {
-                        eprintln!("write error: {}", e);
-                        break;
-                    };
-                }
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                tokio::spawn(handle_connection(stream));
             }
-
             Err(e) => {
-                println!("error: {}", e);
+                eprintln!("Error: {}", e);
+                continue;
             }
+        }
+    }
+}
+
+async fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+
+    loop {
+        let _n = match stream.read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("Read error: {}", e);
+                break;
+            }
+        };
+
+        let response = "+PONG\r\n";
+        if let Err(e) = stream.write_all(response.as_bytes()).await {
+            eprintln!("Write error: {}", e);
+            break;
         }
     }
 }
